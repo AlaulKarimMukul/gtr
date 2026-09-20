@@ -1,0 +1,155 @@
+<!DOCTYPE html>
+<html lang="en" class=""><head><script>window.livecodes = window.livecodes || {};</script><title>Untitled Project</title><meta name="title" content="Untitled Project"><meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0"><style id="__livecodes_styles__">.container,
+.container button {
+  text-align: center;
+  font: 1em sans-serif;
+}
+.logo {
+  width: 150px;
+}
+</style><script src="https://cdn.jsdelivr.net/npm/brython@3.12.4/brython.min.js"></script><script src="https://cdn.jsdelivr.net/npm/brython@3.12.4/brython_stdlib.js"></script><script src="https://cdn.jsdelivr.net/npm/es-module-shims@1.10.0/dist/es-module-shims.js" async=""></script><script type="importmap">{
+  "imports": {}
+}</script></head><body><div class="container">
+  <h1 id="header">Hello, World!</h1>
+  <img class="logo" alt="logo" src="https://livecodes.io/livecodes/assets/templates/python.svg">
+  <p>You clicked <span id="counter">0</span> times.</p>
+  <button id="counter-button">Click me</button>
+</div>
+<script type="text/python">from browser import document
+import time
+
+title = 'Python'
+document['header'].html = f"Hello, {title}!"
+
+counter = 0
+
+def increment(ev):
+    global counter
+    counter += 1
+    document['counter'].html = str(counter)
+
+document["counter-button"].bind("click", increment)
+
+# check console
+current_time = int(time.strftime('%H'))
+if current_time < 12 :
+      print('Good morning')
+elif 12 <= current_time < 18:
+      print('Good afternoon')
+else:
+      print('Good evening')
+# ===================================================================
+# LIVE CODES (PYODIDE) ADAPTATION
+# ===================================================================
+import pandas as pd
+import json
+import io
+from js import fetch, Blob, window
+import asyncio
+
+# ===================================================================
+# CONFIGURATION
+# ===================================================================
+API_KEY = "fc-981af753bd474d5ebde1834a1e47637f" # ⚠️ SECURITY: You should revoke this key and use a new one!
+
+# ⚠️ CRITICAL: Replace this with the direct .pdf URL from your browser's Network tab
+# For testing, you can use a placeholder URL to ensure the connection works.
+PDF_URL = "PASTE_YOUR_DIRECT_PDF_URL_HERE"
+
+if PDF_URL == "PASTE_YOUR_DIRECT_PDF_URL_HERE":
+    print("ERROR: You must replace 'PASTE_YOUR_DIRECT_PDF_URL_HERE' with the actual PDF link!")
+    # We'll use a placeholder to show the code runs.
+    PDF_URL = "https://www.w3.org/WAI/ER/tests/xhtml/testfiles/resources/pdf/dummy.pdf"
+    print(f"Using placeholder PDF for testing: {PDF_URL}")
+
+# ===================================================================
+# ASYNC SCRAPE FUNCTION
+# ===================================================================
+async def scrape_and_process():
+    payload = {
+        "url": PDF_URL,
+        "formats": ["json"],
+        "parsers": ["pdf"],
+        "pdfOptions": {
+            "pages": "10-300"
+        },
+        "onlyMainContent": False,
+        "waitFor": 10000,
+        "extract": {
+            "prompt": "Extract ALL bank contact information. For each institution: name, address, phone, website. For each contact person: full_name, job_title, email_address, phone_number. Extract ALL contacts. Return JSON array.",
+            "enableWebSearch": False
+        }
+    }
+
+    headers = {
+        "Authorization": f"Bearer {API_KEY}",
+        "Content-Type": "application/json"
+    }
+
+    # Use the browser's fetch API directly
+    response = await fetch(
+        "https://api.firecrawl.dev/v1/scrape",
+        {
+            "method": "POST",
+            "headers": headers,
+            "body": json.dumps(payload)
+        }
+    )
+    
+    return await response.json()
+
+# ===================================================================
+# MAIN EXECUTION
+# ===================================================================
+async def main():
+    print("Sending request to Firecrawl. This may take a few minutes...")
+    
+    try:
+        data = await scrape_and_process()
+        
+        # Check for errors in the API response
+        if "error" in data:
+            print(f"Firecrawl API Error: {data['error']}")
+            return
+
+        # Save the raw JSON file
+        json_filename = "gtr_directory_contacts.json"
+        json_str = json.dumps(data, indent=4)
+        # In Pyodide, we can just print it or use a download helper
+        print(f"\n--- RAW JSON DATA (truncated) ---\n{json_str[:500]}...\n")
+        
+        # --- DATA PROCESSING ---
+        rows = []
+        institutions = data.get("data", {}).get("json", [])
+        if not institutions:
+            institutions = data.get("json", [])
+            
+        for inst in institutions:
+            inst_name = inst.get("institution_name", "Unknown")
+            for contact in inst.get("contacts", []):
+                rows.append({
+                    "Institution": inst_name,
+                    "Full Name": contact.get("full_name"),
+                    "Job Title": contact.get("job_title"),
+                    "Email": contact.get("email_address"),
+                    "Phone": contact.get("phone_number")
+                })
+
+        if rows:
+            df = pd.DataFrame(rows)
+            df = df.dropna(subset=["Email"])
+            df = df.drop_duplicates(subset=["Email"], keep="first")
+            
+            print(f"\n--- PROCESSED CONTACTS ({len(df)}) ---")
+            print(df.to_string())
+        else:
+            print("\nNo contacts were found in the response. The PDF might be image-based and require OCR mode.")
+
+    except Exception as e:
+        print(f"An error occurred: {e}")
+        import traceback
+        traceback.print_exc()
+
+# In LiveCodes/Pyodide, we need to run the async main function
+await main() # Use 'await' directly in the global scope</script></body></html>
